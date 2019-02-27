@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000
 
 //middleware
 app.use(logger('dev'));
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 //establishing the public folder for handlebars
@@ -29,9 +29,43 @@ app.set("view engine", "handlebars");
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost/mongoHeadlines'
 mongoose.connect(MONGODB_URI)
 
-// Routes
-require('./routes/apiRoutes')(app);
-require('./routes/htmlRoutes')(app);
+app.get('/', (req, res) => {
+    axios.get('https://old.reddit.com/r/ProgrammerHumor/').then(response => {
+        const $ = cheerio.load(response.data);
+        $('p.title').each((i, element) => {
+            let result = {};
+
+            result.title = $(element).text();
+            result.link = $(element).children().attr("href");
+
+            db.Article.create(result)
+                .then(dbArticle => console.log(dbArticle))
+                // .catch(err => console.log(err))
+        })
+        res.render('index');
+    })   
+})
+
+app.get('/redditposts', (req, res) => {
+    db.Article.find({})
+        .then(dbArticle => res.json(dbArticle))
+        .catch(err => res.json(err));
+});
+
+app.get('/redditposts/:id', (req, res) => {
+    db.Article.findOne({ _id: req.params.id })
+        .populate('note')
+        .then(dbArticle => res.json(dbArticle))
+        .catch(err => res.json(err));
+});
+
+app.post('/redditposts/:id', (req, res) => {
+    db.Note.create(req.body)
+        .then(dbNote => 
+            db.Article.findOneAndUpdate({ _id: req.params.id}, {note: dbNote._id }, { new: true}))
+        .then(dbArticle => res.json(dbArticle))
+        .catch(err => res.json(err));
+})
 
 // Starting Express
 app.listen(PORT, () => console.log('App is running on port ', PORT, '.'));
